@@ -15,6 +15,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 import { processAudioFile } from '../services/audioProcessor';
 import { buildMidiTrack, deduplicateNotes } from '../services/midiGenerator';
 import { selectBestSection } from '../services/sectionSelector';
@@ -104,13 +105,16 @@ router.post(
       const midiTrack = buildMidiTrack(title, artist, onsets, bpm, duration, sectionStart, sectionEnd);
       midiTrack.notes = deduplicateNotes(midiTrack.notes);
 
-      // Persist to DB
-      const [result] = await pool.execute(
+      // Generate UUID and persist to DB
+      const trackId = uuidv4();
+      
+      await pool.execute(
         `INSERT INTO tracks
-           (title, artist, bpm, duration, section_start, section_end,
+           (id, title, artist, bpm, duration, section_start, section_end,
             original_file_path, processed_file_path, midi_data, waveform_data, difficulty)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
+          trackId,
           title,
           artist ?? null,
           bpm,
@@ -125,10 +129,8 @@ router.post(
         ]
       );
 
-      const insertId = (result as { insertId: number }).insertId;
-
       res.status(201).json({
-        id: insertId,
+        id: trackId,
         title,
         artist,
         bpm,

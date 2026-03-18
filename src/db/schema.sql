@@ -1,9 +1,9 @@
 -- RhythmSense Database Schema
 -- MySQL 8.0+
 
-CREATE DATABASE IF NOT EXISTS rhythmsense CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS u553161013_quenna CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-USE rhythmsense;
+USE u553161013_quenna;
 
 CREATE TABLE IF NOT EXISTS users (
   id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX idx_users_email ON users(email);
 
 CREATE TABLE IF NOT EXISTS tracks (
-  id                   INT PRIMARY KEY AUTO_INCREMENT,
+  id                   CHAR(36) PRIMARY KEY,  -- UUID
   title                VARCHAR(200) NOT NULL,
   artist               VARCHAR(200),
   bpm                  FLOAT,
@@ -32,17 +32,14 @@ CREATE TABLE IF NOT EXISTS tracks (
   waveform_data        JSON,
   difficulty           VARCHAR(20) DEFAULT 'medium',
   created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Run this on the live database to add section columns to existing tables:
--- ALTER TABLE tracks
---   ADD COLUMN section_start FLOAT NULL AFTER duration,
---   ADD COLUMN section_end   FLOAT NULL AFTER section_start;
+CREATE INDEX idx_tracks_created ON tracks(created_at);
 
 CREATE TABLE IF NOT EXISTS scores (
   id            INT PRIMARY KEY AUTO_INCREMENT,
   user_id       INT,
-  track_id      INT NOT NULL,
+  track_id      CHAR(36) NOT NULL,  -- UUID reference
   score         INT NOT NULL,
   accuracy      FLOAT,
   max_combo     INT,
@@ -52,15 +49,20 @@ CREATE TABLE IF NOT EXISTS scores (
   created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id)  REFERENCES users(id)  ON DELETE SET NULL,
   FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX idx_scores_track ON scores(track_id);
+CREATE INDEX idx_scores_user ON scores(user_id);
 
 CREATE TABLE IF NOT EXISTS user_progress (
   id          INT PRIMARY KEY AUTO_INCREMENT,
   user_id     INT NOT NULL,
-  track_id    INT NOT NULL,
+  track_id    CHAR(36) NOT NULL,  -- UUID reference
   best_score  INT,
   play_count  INT DEFAULT 0,
   UNIQUE KEY uq_user_track (user_id, track_id),
   FOREIGN KEY (user_id)  REFERENCES users(id)  ON DELETE CASCADE,
   FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX idx_progress_user ON user_progress(user_id);

@@ -151,7 +151,7 @@ router.post(
   authMiddleware,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const trackId = Number(req.params.id);
+      const trackId = req.params.id; // UUID string
       const userId = req.user!.userId; // From auth middleware
       
       const {

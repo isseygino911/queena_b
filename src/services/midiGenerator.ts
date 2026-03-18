@@ -12,11 +12,23 @@ import { AnalyzedOnset } from './beatAnalyzer';
 /** Number of playable lanes (keyboard keys) in the game */
 const LANE_COUNT = 6;
 
-/** Minimum time gap between consecutive notes (ms) - ensures newbie-friendly pacing */
-const MIN_NOTE_GAP_MS = 250;
+// Difficulty parameters (configurable per track)
+let MIN_NOTE_GAP_MS = 200;
+let MAX_NOTES_PER_SECOND = 8;
 
-/** Maximum notes per second - caps density for playability */
-const MAX_NOTES_PER_SECOND = 4;
+/**
+ * Set difficulty parameters for note generation.
+ * Call this before processing a track.
+ */
+export function setDifficultyParams(
+  minGapMs: number,
+  maxNotesPerSec: number,
+  onsetThreshold: number
+): void {
+  MIN_NOTE_GAP_MS = minGapMs;
+  MAX_NOTES_PER_SECOND = maxNotesPerSec;
+  // Note: onsetThreshold is used in audioProcessor.ts
+}
 
 /** Default note velocity when none is detected */
 const DEFAULT_VELOCITY = 80;

@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS tracks (
   midi_data            JSON,
   waveform_data        JSON,
   difficulty           VARCHAR(20) DEFAULT 'medium',
+  min_note_gap_ms      INT DEFAULT 250,       -- difficulty: note spacing
+  max_notes_per_second INT DEFAULT 4,         -- difficulty: density cap
+  onset_threshold      FLOAT DEFAULT 2.2,     -- difficulty: detection sensitivity
   created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

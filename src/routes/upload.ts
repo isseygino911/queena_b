@@ -19,7 +19,7 @@ import fs from 'fs';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { processAudioFile } from '../services/audioProcessor';
-import { buildMidiTrackFromAnalyzedOnsets } from '../services/midiGenerator';
+import { buildMidiTrackFromAnalyzedOnsets, setDifficultyParams } from '../services/midiGenerator';
 import { analyzeBeatPattern } from '../services/beatAnalyzer';
 import pool from '../db/database';
 import { Difficulty } from '../../../shared/types/midi';
@@ -92,6 +92,14 @@ router.post(
           ? (req.body.difficulty as Difficulty)
           : 'medium';
 
+      // Parse difficulty parameters (with defaults)
+      const minNoteGapMs = Math.max(50, Math.min(500, parseInt(req.body.minNoteGapMs as string) || 250));
+      const maxNotesPerSecond = Math.max(2, Math.min(15, parseInt(req.body.maxNotesPerSecond as string) || 4));
+      const onsetThreshold = Math.max(1.0, Math.min(3.0, parseFloat(req.body.onsetThreshold as string) || 2.2));
+
+      // Apply difficulty parameters
+      setDifficultyParams(minNoteGapMs, maxNotesPerSecond, onsetThreshold);
+
       // Generate track ID early for S3 paths
       const trackId = uuidv4();
 
@@ -157,6 +165,9 @@ router.post(
           JSON.stringify(midiTrack),
           JSON.stringify(waveformData),
           difficulty,
+          minNoteGapMs,
+          maxNotesPerSecond,
+          onsetThreshold,
         ]
       );
 

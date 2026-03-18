@@ -5,11 +5,14 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import dotenv from 'dotenv';
 import { testConnection } from './db/database';
 import uploadRouter from './routes/upload';
 import tracksRouter from './routes/tracks';
+import authRoutes from './routes/authRoutes';
 
 dotenv.config();
 
@@ -20,14 +23,20 @@ const PORT = Number(process.env.PORT ?? 3002);
 // Middleware
 // ---------------------------------------------------------------------------
 
+// Security headers
+app.use(helmet());
+
+// CORS with credentials for cookies
 app.use(
   cors({
     origin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173',
     credentials: true,
   })
 );
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Serve processed audio files statically so the client can stream them
 app.use(
@@ -41,6 +50,7 @@ app.use(
 
 app.use('/api/upload', uploadRouter);
 app.use('/api/tracks', tracksRouter);
+app.use('/api/auth', authRoutes);
 
 /** Health-check endpoint */
 app.get('/health', (_req, res) => {

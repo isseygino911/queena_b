@@ -11,6 +11,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import fs from 'fs';
 import pool from '../db/database';
+import { authMiddleware } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -142,16 +143,18 @@ router.delete(
 );
 
 // ---------------------------------------------------------------------------
-// POST /api/tracks/:id/score
+// POST /api/tracks/:id/score - Submit score (requires authentication)
 // ---------------------------------------------------------------------------
 
 router.post(
   '/:id/score',
+  authMiddleware,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const trackId = Number(req.params.id);
+      const userId = req.user!.userId; // From auth middleware
+      
       const {
-        userId,
         score,
         accuracy,
         maxCombo,
@@ -159,7 +162,6 @@ router.post(
         goodCount,
         missCount,
       } = req.body as {
-        userId?: number;
         score: number;
         accuracy: number;
         maxCombo: number;
@@ -174,7 +176,7 @@ router.post(
             perfect_count, good_count, miss_count)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          userId ?? null,
+          userId,
           trackId,
           score,
           accuracy,
@@ -187,17 +189,15 @@ router.post(
 
       const insertId = (result as { insertId: number }).insertId;
 
-      // Update user_progress if userId supplied
-      if (userId) {
-        await pool.execute(
-          `INSERT INTO user_progress (user_id, track_id, best_score, play_count)
-           VALUES (?, ?, ?, 1)
-           ON DUPLICATE KEY UPDATE
-             best_score = GREATEST(best_score, VALUES(best_score)),
-             play_count = play_count + 1`,
-          [userId, trackId, score]
-        );
-      }
+      // Update user_progress
+      await pool.execute(
+        `INSERT INTO user_progress (user_id, track_id, best_score, play_count)
+         VALUES (?, ?, ?, 1)
+         ON DUPLICATE KEY UPDATE
+           best_score = GREATEST(best_score, VALUES(best_score)),
+           play_count = play_count + 1`,
+        [userId, trackId, score]
+      );
 
       res.status(201).json({ id: insertId });
     } catch (err) {
@@ -224,6 +224,56 @@ router.get(
          ORDER BY s.score DESC
          LIMIT 20`,
         [req.params.id]
+      );
+      res.json(rows);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/tracks/:id/my-scores – current user's scores for this track
+// ---------------------------------------------------------------------------
+
+router.get(
+  '/:id/my-scores',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.userId;
+      const [rows] = await pool.execute(
+        `SELECT s.id, s.score, s.accuracy, s.max_combo,
+                s.perfect_count, s.good_count, s.miss_count, s.created_at
+         FROM scores s
+         WHERE s.track_id = ? AND s.user_id = ?
+         ORDER BY s.score DESC`,
+        [req.params.id, userId]
+      );
+      res.json(rows);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/tracks/user/progress – all tracks with user's progress
+// ---------------------------------------------------------------------------
+
+router.get(
+  '/user/progress',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.userId;
+      const [rows] = await pool.execute(
+        `SELECT t.id, t.title, t.artist, t.bpm, t.difficulty,
+                up.best_score, up.play_count
+         FROM tracks t
+         LEFT JOIN user_progress up ON up.track_id = t.id AND up.user_id = ?
+         ORDER BY t.created_at DESC`,
+        [userId]
       );
       res.json(rows);
     } catch (err) {

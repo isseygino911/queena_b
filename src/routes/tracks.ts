@@ -1,0 +1,235 @@
+/**
+ * Track CRUD routes
+ *
+ * GET    /api/tracks          - List all tracks
+ * GET    /api/tracks/:id      - Get single track with MIDI data
+ * DELETE /api/tracks/:id      - Delete a track (admin)
+ * POST   /api/tracks/:id/score - Submit a score for a track
+ * GET    /api/tracks/:id/scores - Get leaderboard for a track
+ */
+
+import express, { Request, Response, NextFunction } from 'express';
+import fs from 'fs';
+import pool from '../db/database';
+
+const router = express.Router();
+
+// ---------------------------------------------------------------------------
+// GET /api/tracks
+// ---------------------------------------------------------------------------
+
+router.get(
+  '/',
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const [rows] = await pool.execute(
+        `SELECT id, title, artist, bpm, duration, section_start, section_end,
+                difficulty, created_at
+         FROM tracks
+         ORDER BY created_at DESC`
+      );
+      res.json(rows);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/tracks/:id
+// ---------------------------------------------------------------------------
+
+router.get(
+  '/:id',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const [rows] = await pool.execute(
+        `SELECT id, title, artist, bpm, duration, section_start, section_end,
+                difficulty, midi_data, waveform_data, processed_file_path, created_at
+         FROM tracks
+         WHERE id = ?`,
+        [req.params.id]
+      );
+
+      const track = (rows as unknown[])[0] as Record<string, unknown> | undefined;
+
+      if (!track) {
+        res.status(404).json({ error: 'Track not found' });
+        return;
+      }
+
+      // mysql2 returns JSON columns as already-parsed objects when
+      // using newer drivers; guard for both cases.
+      if (typeof track.midi_data === 'string') {
+        track.midi_data = JSON.parse(track.midi_data as string);
+      }
+      if (typeof track.waveform_data === 'string') {
+        track.waveform_data = JSON.parse(track.waveform_data as string);
+      }
+
+      // Re-zero note times to section window so the game loop sees t=0 at section start
+      const sectionStart = typeof track.section_start === 'number' ? track.section_start : null;
+      const sectionEnd = typeof track.section_end === 'number' ? track.section_end : null;
+
+      if (sectionStart !== null && sectionEnd !== null && track.midi_data) {
+        const midiData = track.midi_data as {
+          notes: Array<{ time: number }>;
+          duration: number;
+          sectionStart?: number;
+          sectionEnd?: number;
+        };
+
+        // Filter notes to section window and re-zero their times
+        midiData.notes = midiData.notes
+          .filter(
+            (note) =>
+              note.time >= sectionStart * 1000 && note.time <= sectionEnd * 1000
+          )
+          .map((note) => ({ ...note, time: note.time - sectionStart * 1000 }));
+
+        midiData.duration = sectionEnd - sectionStart;
+        midiData.sectionStart = sectionStart;
+        midiData.sectionEnd = sectionEnd;
+      }
+
+      res.json(track);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// DELETE /api/tracks/:id
+// ---------------------------------------------------------------------------
+
+router.delete(
+  '/:id',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // Fetch file paths before deleting
+      const [rows] = await pool.execute(
+        `SELECT original_file_path, processed_file_path FROM tracks WHERE id = ?`,
+        [req.params.id]
+      );
+      const track = (rows as unknown[])[0] as
+        | { original_file_path?: string; processed_file_path?: string }
+        | undefined;
+
+      if (!track) {
+        res.status(404).json({ error: 'Track not found' });
+        return;
+      }
+
+      await pool.execute('DELETE FROM tracks WHERE id = ?', [req.params.id]);
+
+      // Best-effort file cleanup
+      for (const p of [track.original_file_path, track.processed_file_path]) {
+        if (p && fs.existsSync(p)) {
+          try {
+            fs.unlinkSync(p);
+          } catch {
+            /* non-fatal */
+          }
+        }
+      }
+
+      res.json({ message: 'Track deleted' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /api/tracks/:id/score
+// ---------------------------------------------------------------------------
+
+router.post(
+  '/:id/score',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const trackId = Number(req.params.id);
+      const {
+        userId,
+        score,
+        accuracy,
+        maxCombo,
+        perfectCount,
+        goodCount,
+        missCount,
+      } = req.body as {
+        userId?: number;
+        score: number;
+        accuracy: number;
+        maxCombo: number;
+        perfectCount: number;
+        goodCount: number;
+        missCount: number;
+      };
+
+      const [result] = await pool.execute(
+        `INSERT INTO scores
+           (user_id, track_id, score, accuracy, max_combo,
+            perfect_count, good_count, miss_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          userId ?? null,
+          trackId,
+          score,
+          accuracy,
+          maxCombo,
+          perfectCount,
+          goodCount,
+          missCount,
+        ]
+      );
+
+      const insertId = (result as { insertId: number }).insertId;
+
+      // Update user_progress if userId supplied
+      if (userId) {
+        await pool.execute(
+          `INSERT INTO user_progress (user_id, track_id, best_score, play_count)
+           VALUES (?, ?, ?, 1)
+           ON DUPLICATE KEY UPDATE
+             best_score = GREATEST(best_score, VALUES(best_score)),
+             play_count = play_count + 1`,
+          [userId, trackId, score]
+        );
+      }
+
+      res.status(201).json({ id: insertId });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/tracks/:id/scores – leaderboard top 20
+// ---------------------------------------------------------------------------
+
+router.get(
+  '/:id/scores',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const [rows] = await pool.execute(
+        `SELECT s.id, s.score, s.accuracy, s.max_combo,
+                s.perfect_count, s.good_count, s.miss_count, s.created_at,
+                u.username
+         FROM scores s
+         LEFT JOIN users u ON u.id = s.user_id
+         WHERE s.track_id = ?
+         ORDER BY s.score DESC
+         LIMIT 20`,
+        [req.params.id]
+      );
+      res.json(rows);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+export default router;

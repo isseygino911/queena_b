@@ -45,11 +45,11 @@ export async function convertToWav(
       .audioCodec('pcm_s16le')
       .format('wav')
       .on('end', () => {
-        console.log(`[audioProcessor] Converted: ${outputPath}`);
+        if (process.env.NODE_ENV !== 'production') console.log(`[audioProcessor] Converted: ${outputPath}`);
         resolve(outputPath);
       })
       .on('error', (err: Error) => {
-        console.error('[audioProcessor] FFmpeg error:', err.message);
+        if (process.env.NODE_ENV !== 'production') console.error('[audioProcessor] FFmpeg error:', err.message);
         reject(err);
       })
       .save(outputPath);

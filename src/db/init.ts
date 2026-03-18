@@ -23,7 +23,7 @@ async function init(): Promise<void> {
   const sql = fs.readFileSync(schemaPath, 'utf8');
 
   await conn.query(sql);
-  console.log('[db:init] Schema applied successfully');
+  if (process.env.NODE_ENV !== 'production') console.log('[db:init] Schema applied successfully');
   await conn.end();
 }
 

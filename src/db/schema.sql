@@ -38,7 +38,7 @@ CREATE INDEX idx_tracks_created ON tracks(created_at);
 
 CREATE TABLE IF NOT EXISTS scores (
   id            INT PRIMARY KEY AUTO_INCREMENT,
-  user_id       INT,
+  user_id       INT UNSIGNED,
   track_id      CHAR(36) NOT NULL,  -- UUID reference
   score         INT NOT NULL,
   accuracy      FLOAT,
@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS scores (
   perfect_count INT,
   good_count    INT,
   miss_count    INT,
+  total_notes   INT,
+  grade         VARCHAR(4),
   created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id)  REFERENCES users(id)  ON DELETE SET NULL,
   FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE

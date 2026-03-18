@@ -16,6 +16,22 @@ import { getCloudFrontUrlFromS3 } from '../config/cloudfront';
 
 const router = express.Router();
 
+interface TrackRow {
+  id: number;
+  title: string;
+  artist: string | null;
+  bpm: number;
+  duration: number | null;
+  section_start: number | null;
+  section_end: number | null;
+  difficulty: string | null;
+  midi_data: unknown;
+  waveform_data: unknown;
+  processed_file_path: string | null;
+  created_at: string;
+  audio_url?: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/tracks
 // ---------------------------------------------------------------------------
@@ -53,7 +69,7 @@ router.get(
         [req.params.id]
       );
 
-      const track = (rows as unknown[])[0] as Record<string, unknown> | undefined;
+      const track = (rows as TrackRow[])[0] as TrackRow | undefined;
 
       if (!track) {
         res.status(404).json({ error: 'Track not found' });
@@ -95,7 +111,7 @@ router.get(
       }
 
       // Generate signed URL for audio playback
-      const processedFilePath = track.processed_file_path as string | undefined;
+      const processedFilePath = track.processed_file_path;
       if (processedFilePath) {
         try {
           // Try CloudFront first (7-day expiration)
@@ -179,6 +195,8 @@ router.post(
         perfectCount,
         goodCount,
         missCount,
+        totalNotes,
+        grade,
       } = req.body as {
         score: number;
         accuracy: number;
@@ -186,13 +204,15 @@ router.post(
         perfectCount: number;
         goodCount: number;
         missCount: number;
+        totalNotes: number;
+        grade: string;
       };
 
       const [result] = await pool.execute(
         `INSERT INTO scores
            (user_id, track_id, score, accuracy, max_combo,
-            perfect_count, good_count, miss_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            perfect_count, good_count, miss_count, total_notes, grade)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userId,
           trackId,
@@ -202,6 +222,8 @@ router.post(
           perfectCount,
           goodCount,
           missCount,
+          totalNotes,
+          grade,
         ]
       );
 
@@ -234,7 +256,8 @@ router.get(
     try {
       const [rows] = await pool.execute(
         `SELECT s.id, s.score, s.accuracy, s.max_combo,
-                s.perfect_count, s.good_count, s.miss_count, s.created_at,
+                s.perfect_count, s.good_count, s.miss_count,
+                s.total_notes, s.grade, s.created_at,
                 u.username
          FROM scores s
          LEFT JOIN users u ON u.id = s.user_id

@@ -31,7 +31,7 @@ export async function testConnection(): Promise<void> {
   const conn = await pool.getConnection();
   await conn.ping();
   conn.release();
-  console.log('[db] MySQL connection pool ready');
+  if (process.env.NODE_ENV !== 'production') console.log('[db] MySQL connection pool ready');
 }
 
 export default pool;

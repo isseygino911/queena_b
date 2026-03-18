@@ -71,9 +71,9 @@ export async function selectBestSection(
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    console.warn('[section] GEMINI_API_KEY not set — using fallback heuristic');
+    if (process.env.NODE_ENV !== 'production') console.warn('[section] GEMINI_API_KEY not set — using fallback heuristic');
     const result = slidingWindowFallback(onsets, duration);
-    console.log(`[section] Fallback selected: ${result.sectionStart}s – ${result.sectionEnd}s`);
+    if (process.env.NODE_ENV !== 'production') console.log(`[section] Fallback selected: ${result.sectionStart}s – ${result.sectionEnd}s`);
     return result;
   }
 
@@ -119,12 +119,12 @@ Rules:
       throw new Error(`Invalid section values: ${sectionStart} – ${sectionEnd}`);
     }
 
-    console.log(`[section] Gemini selected: ${sectionStart}s – ${sectionEnd}s`);
+    if (process.env.NODE_ENV !== 'production') console.log(`[section] Gemini selected: ${sectionStart}s – ${sectionEnd}s`);
     return { sectionStart, sectionEnd };
   } catch (err) {
-    console.error('[section] Gemini failed, using fallback heuristic:', err);
+    if (process.env.NODE_ENV !== 'production') console.error('[section] Gemini failed, using fallback heuristic:', err);
     const result = slidingWindowFallback(onsets, duration);
-    console.log(`[section] Fallback selected: ${result.sectionStart}s – ${result.sectionEnd}s`);
+    if (process.env.NODE_ENV !== 'production') console.log(`[section] Fallback selected: ${result.sectionStart}s – ${result.sectionEnd}s`);
     return result;
   }
 }

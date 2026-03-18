@@ -22,7 +22,7 @@ const FRAME_SIZE = 512;
 const HOP_SIZE = 256;
 
 /** Energy threshold multiplier above mean to consider as onset */
-const ONSET_THRESHOLD_MULTIPLIER = 1.5;
+const ONSET_THRESHOLD_MULTIPLIER = 2.2;
 
 /**
  * Convert an audio file to 16 kHz mono WAV.
@@ -115,9 +115,9 @@ export function detectOnsets(
 
     // Local maximum above threshold
     if (curr > threshold && curr > prev && curr >= next) {
-      // Enforce minimum distance between onsets (100 ms)
+      // Enforce minimum distance between onsets (200 ms for newbie-friendly spacing)
       const minFrameDistance = Math.floor(
-        (0.1 * sampleRate) / HOP_SIZE
+        (0.2 * sampleRate) / HOP_SIZE
       );
       if (i - lastOnsetFrame >= minFrameDistance) {
         const timeSeconds = (i * HOP_SIZE) / sampleRate;

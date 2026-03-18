@@ -7,9 +7,16 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { MidiNote, MidiTrack, OnsetEvent } from '../../../shared/types/midi';
+import { AnalyzedOnset } from './beatAnalyzer';
 
 /** Number of playable lanes (keyboard keys) in the game */
 const LANE_COUNT = 6;
+
+/** Minimum time gap between consecutive notes (ms) - ensures newbie-friendly pacing */
+const MIN_NOTE_GAP_MS = 250;
+
+/** Maximum notes per second - caps density for playability */
+const MAX_NOTES_PER_SECOND = 4;
 
 /** Default note velocity when none is detected */
 const DEFAULT_VELOCITY = 80;
@@ -60,13 +67,15 @@ function assignPitch(lane: number): number {
  */
 export function onsetsToNotes(
   onsets: OnsetEvent[],
-  bpm: number
+  bpm: number,
+  durationSeconds: number = 60
 ): MidiNote[] {
   const beatDurationMs = 60_000 / bpm;
   // Duration = half a beat, but at least 80 ms
   const noteDuration = Math.max(80, beatDurationMs * 0.5);
 
-  return onsets.map((onset, idx) => {
+  // Convert all onsets to notes first
+  const allNotes = onsets.map((onset, idx) => {
     const lane = assignLane(onset.strength, idx);
     return {
       id: uuidv4(),
@@ -77,6 +86,9 @@ export function onsetsToNotes(
       lane,
     };
   });
+  
+  // Filter to ensure newbie-friendly difficulty
+  return filterNotesForDifficulty(allNotes, durationSeconds);
 }
 
 /**
@@ -100,7 +112,7 @@ export function buildMidiTrack(
   sectionStart?: number,
   sectionEnd?: number
 ): MidiTrack {
-  const notes = onsetsToNotes(onsets, bpm);
+  const notes = onsetsToNotes(onsets, bpm, duration);
 
   return {
     id: uuidv4(),
@@ -113,6 +125,72 @@ export function buildMidiTrack(
     timeSignatureDenominator: 4,
     ...(sectionStart !== undefined && { sectionStart }),
     ...(sectionEnd !== undefined && { sectionEnd }),
+  };
+}
+
+/**
+ * Build a MidiTrack from AI-analyzed onsets with beat-corrected timing.
+ * 
+ * @param analyzedOnsets - Onsets with AI-corrected beat positions
+ * @param bpm            - Track BPM
+ * @param duration       - Track duration in seconds
+ * @returns MidiTrack with notes aligned to beats
+ */
+export function buildMidiTrackFromAnalyzedOnsets(
+  title: string,
+  artist: string | undefined,
+  analyzedOnsets: AnalyzedOnset[],
+  bpm: number,
+  duration: number
+): MidiTrack {
+  const beatDurationMs = 60_000 / bpm;
+  
+  // Convert analyzed onsets to notes
+  // Prioritize on-beat notes for beginner-friendly gameplay
+  const onBeatNotes = analyzedOnsets
+    .filter((o) => o.isOnBeat)
+    .map((onset, idx) => {
+      const lane = assignLane(onset.strength, idx);
+      return {
+        id: uuidv4(),
+        time: Math.round(onset.correctedTime),
+        pitch: assignPitch(lane),
+        duration: Math.max(80, beatDurationMs * 0.5),
+        velocity: Math.round(onset.strength * 127) || DEFAULT_VELOCITY,
+        lane,
+      };
+    });
+
+  // Add some off-beat notes if we have too few on-beat notes
+  // but only if they're strong transients
+  const offBeatNotes = analyzedOnsets
+    .filter((o) => !o.isOnBeat && o.strength > 0.7)
+    .slice(0, Math.floor(onBeatNotes.length * 0.3)) // Max 30% off-beat
+    .map((onset, idx) => {
+      const lane = assignLane(onset.strength, idx + onBeatNotes.length);
+      return {
+        id: uuidv4(),
+        time: Math.round(onset.correctedTime),
+        pitch: assignPitch(lane),
+        duration: Math.max(80, beatDurationMs * 0.5),
+        velocity: Math.round(onset.strength * 127) || DEFAULT_VELOCITY,
+        lane,
+      };
+    });
+
+  // Combine and filter for playability
+  const allNotes = [...onBeatNotes, ...offBeatNotes];
+  const filteredNotes = filterNotesForDifficulty(allNotes, duration);
+
+  return {
+    id: uuidv4(),
+    title,
+    artist,
+    bpm,
+    duration,
+    notes: filteredNotes,
+    timeSignatureNumerator: 4,
+    timeSignatureDenominator: 4,
   };
 }
 
@@ -133,20 +211,51 @@ export function quantiseNoteTime(
 }
 
 /**
- * Filter out notes that are suspiciously close together (< 50 ms apart in
- * the same lane) to avoid impossible double-hits.
+ * Filter notes to ensure newbie-friendly difficulty:
+ * 1. Remove notes that are too close together in time (global spacing)
+ * 2. Remove notes that are too close in the same lane
+ * 3. Cap overall note density
  */
-export function deduplicateNotes(notes: MidiNote[]): MidiNote[] {
+export function filterNotesForDifficulty(notes: MidiNote[], durationSeconds: number): MidiNote[] {
+  // Sort by time
   const sorted = [...notes].sort((a, b) => a.time - b.time);
   const result: MidiNote[] = [];
   const lastTimestampByLane: Record<number, number> = {};
-
+  let lastNoteTime = -Infinity;
+  
+  // Calculate max notes based on duration
+  const maxNotes = Math.floor(durationSeconds * MAX_NOTES_PER_SECOND);
+  
   for (const note of sorted) {
-    const last = lastTimestampByLane[note.lane] ?? -Infinity;
-    if (note.time - last >= 50) {
-      result.push(note);
-      lastTimestampByLane[note.lane] = note.time;
+    // Skip if too close to any previous note (global spacing)
+    if (note.time - lastNoteTime < MIN_NOTE_GAP_MS) {
+      continue;
     }
+    
+    // Skip if same lane has note too recently
+    const lastInLane = lastTimestampByLane[note.lane] ?? -Infinity;
+    if (note.time - lastInLane < MIN_NOTE_GAP_MS * 1.5) {
+      continue;
+    }
+    
+    // Cap total note count
+    if (result.length >= maxNotes) {
+      break;
+    }
+    
+    result.push(note);
+    lastTimestampByLane[note.lane] = note.time;
+    lastNoteTime = note.time;
   }
+  
   return result;
+}
+
+/**
+ * Filter out notes that are suspiciously close together (< 50 ms apart in
+ * the same lane) to avoid impossible double-hits.
+ * @deprecated Use filterNotesForDifficulty instead
+ */
+export function deduplicateNotes(notes: MidiNote[]): MidiNote[] {
+  return filterNotesForDifficulty(notes, 60); // fallback with default duration
 }

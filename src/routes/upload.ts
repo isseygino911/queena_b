@@ -19,8 +19,8 @@ import fs from 'fs';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { processAudioFile } from '../services/audioProcessor';
-import { buildMidiTrack, deduplicateNotes } from '../services/midiGenerator';
-import { selectBestSection } from '../services/sectionSelector';
+import { buildMidiTrackFromAnalyzedOnsets } from '../services/midiGenerator';
+import { analyzeBeatPattern } from '../services/beatAnalyzer';
 import pool from '../db/database';
 import { Difficulty } from '../../../shared/types/midi';
 import { authMiddleware, adminMiddleware } from '../middleware/auth';
@@ -104,12 +104,21 @@ router.post(
         await processAudioFile(tempOriginalPath, PROCESSED_DIR);
       tempProcessedPath = processedPath;
 
-      // Select best ~20s section via Gemini AI (falls back to heuristic)
-      const { sectionStart, sectionEnd } = await selectBestSection(onsets, duration);
+      // Use full track (user manually crops audio before upload)
+      const sectionStart = 0;
+      const sectionEnd = duration;
 
-      // Build MIDI track
-      const midiTrack = buildMidiTrack(title, artist, onsets, bpm, duration, sectionStart, sectionEnd);
-      midiTrack.notes = deduplicateNotes(midiTrack.notes);
+      // Analyze beat patterns with AI to align notes to the grid
+      const analyzedOnsets = await analyzeBeatPattern(onsets, bpm);
+
+      // Build MIDI track with AI-corrected beat timing
+      const midiTrack = buildMidiTrackFromAnalyzedOnsets(
+        title,
+        artist,
+        analyzedOnsets,
+        bpm,
+        duration
+      );
 
       // Upload original file to S3
       const originalS3Key = generateS3Key(trackId, req.file.originalname, 'original');
@@ -141,8 +150,8 @@ router.post(
           artist ?? null,
           bpm,
           duration,
-          sectionStart,
-          sectionEnd,
+          0, // sectionStart
+          duration, // sectionEnd
           originalS3Url,
           processedS3Url,
           JSON.stringify(midiTrack),

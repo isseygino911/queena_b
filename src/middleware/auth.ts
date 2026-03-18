@@ -29,10 +29,11 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction):
     req.user = verifyAccessToken(token);
     next();
   } catch (err) {
-    const message = err instanceof Error && err.name === 'TokenExpiredError' 
-      ? 'Token expired' 
+    const message = err instanceof Error && err.name === 'TokenExpiredError'
+      ? 'Token expired'
       : 'Invalid token';
     res.status(401).json({ message });
+    return;
   }
 };
 

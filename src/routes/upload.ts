@@ -73,6 +73,7 @@ router.post(
   adminMiddleware,
   upload.single('file'),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    let tempOriginalPath: string | null = null;
     let tempProcessedPath: string | null = null;
     
     try {
@@ -95,7 +96,7 @@ router.post(
       const trackId = uuidv4();
 
       // Save original file temporarily for processing
-      const tempOriginalPath = path.join(os.tmpdir(), `${trackId}_original`);
+      tempOriginalPath = path.join(os.tmpdir(), `${trackId}_original`);
       fs.writeFileSync(tempOriginalPath, req.file.buffer);
 
       // Process audio (convert + analyse)
@@ -152,8 +153,8 @@ router.post(
 
       // Cleanup temp files
       try {
-        fs.unlinkSync(tempOriginalPath);
-        fs.unlinkSync(processedPath);
+        if (tempOriginalPath) fs.unlinkSync(tempOriginalPath);
+        if (tempProcessedPath) fs.unlinkSync(tempProcessedPath);
       } catch {
         // Ignore cleanup errors
       }
@@ -173,13 +174,12 @@ router.post(
         waveformData,
       });
     } catch (err) {
-      // Cleanup temp file on error
-      if (tempProcessedPath) {
-        try {
-          fs.unlinkSync(tempProcessedPath);
-        } catch {
-          // Ignore cleanup errors
-        }
+      // Cleanup temp files on error
+      try {
+        if (tempOriginalPath) fs.unlinkSync(tempOriginalPath);
+        if (tempProcessedPath) fs.unlinkSync(tempProcessedPath);
+      } catch {
+        // Ignore cleanup errors
       }
       next(err);
     }

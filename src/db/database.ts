@@ -10,9 +10,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 /** Shared connection pool – re-use this across the application. */
+const port = parseInt(process.env.DB_PORT ?? '', 10);
+
 const pool = mysql.createPool({
   host:            process.env.DB_HOST     ?? 'localhost',
-  port:            Number(process.env.DB_PORT ?? 3306),
+  port:            isNaN(port) ? 3306 : port,
   user:            process.env.DB_USER     ?? 'root',
   password:        process.env.DB_PASSWORD ?? '',
   database:        process.env.DB_NAME     ?? 'u553161013_quenna',

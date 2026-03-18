@@ -98,7 +98,14 @@ Rules:
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const response = await model.generateContent(prompt);
+    const GEMINI_TIMEOUT_MS = 10_000;
+
+    const response = await Promise.race([
+      model.generateContent(prompt),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Gemini timeout')), GEMINI_TIMEOUT_MS)
+      ),
+    ]) as Awaited<ReturnType<typeof model.generateContent>>;
     const text = response.response.text().trim();
 
     // Extract JSON from response (may have markdown code fences)

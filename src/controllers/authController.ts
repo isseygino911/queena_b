@@ -237,13 +237,16 @@ export const logout = asyncHandler(async (req: Request, res: Response): Promise<
   const token = req.cookies?.refreshToken;
   
   if (token) {
-    // Invalidate token in DB
-    await pool.execute(
-      'UPDATE users SET refresh_token = NULL WHERE refresh_token = ?',
-      [token]
-    ).catch(() => {
-      // Ignore errors during logout
-    });
+    // Invalidate token in DB - log but don't fail if DB error occurs
+    try {
+      await pool.execute(
+        'UPDATE users SET refresh_token = NULL WHERE refresh_token = ?',
+        [token]
+      );
+    } catch (dbErr) {
+      console.error('Failed to invalidate refresh token in DB:', dbErr);
+      // Continue with logout - clear cookies regardless
+    }
   }
   
   res

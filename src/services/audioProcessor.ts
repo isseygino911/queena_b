@@ -176,10 +176,21 @@ export function generateWaveformData(
   for (let i = 0; i < numPeaks; i++) {
     let max = 0;
     const start = i * chunkSize;
-    for (let j = 0; j < chunkSize && start + j < samples.length; j++) {
+    const end = Math.min(start + chunkSize, samples.length);
+    const actualChunkSize = end - start;
+    
+    for (let j = 0; j < actualChunkSize; j++) {
       const abs = Math.abs(samples[start + j]);
       if (abs > max) max = abs;
     }
+    
+    // Normalize by actual chunk size to account for last chunk potentially being smaller
+    if (actualChunkSize > 0 && actualChunkSize < chunkSize) {
+      // Boost the last chunk proportionally to compensate for fewer samples
+      const boostFactor = chunkSize / actualChunkSize;
+      max = Math.min(1, max * boostFactor); // Cap at 1.0
+    }
+    
     peaks.push(Number(max.toFixed(4)));
   }
 

@@ -5,44 +5,37 @@
  * optional metadata fields (title, artist, difficulty).
  *
  * Pipeline:
- *  1. Multer saves the raw file to uploads/originals/
+ *  1. Multer stores file in memory
  *  2. FFmpeg converts it to 16 kHz mono WAV
  *  3. Onset detection + BPM estimation
- *  4. MIDI track is generated and persisted to MySQL
+ *  4. Original and processed files uploaded to S3
+ *  5. MIDI track is generated and persisted to MySQL with S3 URLs
  */
 
 import express, { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { processAudioFile } from '../services/audioProcessor';
 import { buildMidiTrack, deduplicateNotes } from '../services/midiGenerator';
 import { selectBestSection } from '../services/sectionSelector';
 import pool from '../db/database';
 import { Difficulty } from '../../../shared/types/midi';
+import { authMiddleware, adminMiddleware } from '../middleware/auth';
+import { uploadToS3, generateS3Key } from '../config/s3';
 
 const router = express.Router();
 
 // ---------------------------------------------------------------------------
-// Storage configuration
+// Storage configuration - Memory storage for S3 upload
 // ---------------------------------------------------------------------------
 
-const ORIGINALS_DIR = path.join(__dirname, '..', '..', 'uploads', 'originals');
-const PROCESSED_DIR = path.join(__dirname, '..', '..', 'uploads', 'processed');
+const PROCESSED_DIR = path.join(os.tmpdir(), 'rhythmsense-processed');
+fs.mkdirSync(PROCESSED_DIR, { recursive: true });
 
-[ORIGINALS_DIR, PROCESSED_DIR].forEach((dir) => {
-  fs.mkdirSync(dir, { recursive: true });
-});
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, ORIGINALS_DIR),
-  filename: (_req, file, cb) => {
-    const timestamp = Date.now();
-    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `${timestamp}_${safe}`);
-  },
-});
+const storage = multer.memoryStorage();
 
 const ALLOWED_MIME_TYPES = new Set([
   'audio/mpeg',
@@ -76,8 +69,12 @@ const upload = multer({
  */
 router.post(
   '/',
+  authMiddleware,
+  adminMiddleware,
   upload.single('file'),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    let tempProcessedPath: string | null = null;
+    
     try {
       if (!req.file) {
         res.status(400).json({ error: 'No audio file provided' });
@@ -94,9 +91,17 @@ router.post(
           ? (req.body.difficulty as Difficulty)
           : 'medium';
 
+      // Generate track ID early for S3 paths
+      const trackId = uuidv4();
+
+      // Save original file temporarily for processing
+      const tempOriginalPath = path.join(os.tmpdir(), `${trackId}_original`);
+      fs.writeFileSync(tempOriginalPath, req.file.buffer);
+
       // Process audio (convert + analyse)
       const { processedPath, onsets, bpm, duration, waveformData } =
-        await processAudioFile(req.file.path, PROCESSED_DIR);
+        await processAudioFile(tempOriginalPath, PROCESSED_DIR);
+      tempProcessedPath = processedPath;
 
       // Select best ~20s section via Gemini AI (falls back to heuristic)
       const { sectionStart, sectionEnd } = await selectBestSection(onsets, duration);
@@ -105,9 +110,25 @@ router.post(
       const midiTrack = buildMidiTrack(title, artist, onsets, bpm, duration, sectionStart, sectionEnd);
       midiTrack.notes = deduplicateNotes(midiTrack.notes);
 
-      // Generate UUID and persist to DB
-      const trackId = uuidv4();
-      
+      // Upload original file to S3
+      const originalS3Key = generateS3Key(trackId, req.file.originalname, 'original');
+      const originalS3Url = await uploadToS3(
+        originalS3Key,
+        req.file.buffer,
+        req.file.mimetype || 'audio/mpeg'
+      );
+
+      // Upload processed file to S3
+      const processedBuffer = fs.readFileSync(processedPath);
+      const processedFilename = path.basename(processedPath);
+      const processedS3Key = generateS3Key(trackId, processedFilename, 'processed');
+      const processedS3Url = await uploadToS3(
+        processedS3Key,
+        processedBuffer,
+        'audio/wav'
+      );
+
+      // Persist to DB with S3 URLs
       await pool.execute(
         `INSERT INTO tracks
            (id, title, artist, bpm, duration, section_start, section_end,
@@ -121,13 +142,21 @@ router.post(
           duration,
           sectionStart,
           sectionEnd,
-          req.file.path,
-          processedPath,
+          originalS3Url,
+          processedS3Url,
           JSON.stringify(midiTrack),
           JSON.stringify(waveformData),
           difficulty,
         ]
       );
+
+      // Cleanup temp files
+      try {
+        fs.unlinkSync(tempOriginalPath);
+        fs.unlinkSync(processedPath);
+      } catch {
+        // Ignore cleanup errors
+      }
 
       res.status(201).json({
         id: trackId,
@@ -138,10 +167,20 @@ router.post(
         sectionStart,
         sectionEnd,
         difficulty,
+        originalUrl: originalS3Url,
+        processedUrl: processedS3Url,
         midiData: midiTrack,
         waveformData,
       });
     } catch (err) {
+      // Cleanup temp file on error
+      if (tempProcessedPath) {
+        try {
+          fs.unlinkSync(tempProcessedPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
       next(err);
     }
   }

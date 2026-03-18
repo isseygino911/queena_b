@@ -9,9 +9,10 @@
  */
 
 import express, { Request, Response, NextFunction } from 'express';
-import fs from 'fs';
 import pool from '../db/database';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, adminMiddleware } from '../middleware/auth';
+import { deleteFromS3, getKeyFromS3Url, getPresignedUrl } from '../config/s3';
+import { getCloudFrontUrlFromS3 } from '../config/cloudfront';
 
 const router = express.Router();
 
@@ -93,6 +94,18 @@ router.get(
         midiData.sectionEnd = sectionEnd;
       }
 
+      // Generate signed URL for audio playback
+      const processedFilePath = track.processed_file_path as string | undefined;
+      if (processedFilePath) {
+        try {
+          // Try CloudFront first (7-day expiration)
+          track.audio_url = getCloudFrontUrlFromS3(processedFilePath, 7 * 24 * 60 * 60);
+        } catch {
+          // Fallback to S3 presigned URL (24-hour expiration)
+          track.audio_url = await getPresignedUrl(processedFilePath, 86400);
+        }
+      }
+
       res.json(track);
     } catch (err) {
       next(err);
@@ -106,9 +119,11 @@ router.get(
 
 router.delete(
   '/:id',
+  authMiddleware,
+  adminMiddleware,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      // Fetch file paths before deleting
+      // Fetch S3 URLs before deleting
       const [rows] = await pool.execute(
         `SELECT original_file_path, processed_file_path FROM tracks WHERE id = ?`,
         [req.params.id]
@@ -124,13 +139,16 @@ router.delete(
 
       await pool.execute('DELETE FROM tracks WHERE id = ?', [req.params.id]);
 
-      // Best-effort file cleanup
-      for (const p of [track.original_file_path, track.processed_file_path]) {
-        if (p && fs.existsSync(p)) {
-          try {
-            fs.unlinkSync(p);
-          } catch {
-            /* non-fatal */
+      // Delete files from S3 (best-effort)
+      for (const url of [track.original_file_path, track.processed_file_path]) {
+        if (url) {
+          const key = getKeyFromS3Url(url);
+          if (key) {
+            try {
+              await deleteFromS3(key);
+            } catch {
+              /* non-fatal */
+            }
           }
         }
       }

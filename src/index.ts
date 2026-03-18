@@ -13,6 +13,7 @@ import { testConnection } from './db/database';
 import uploadRouter from './routes/upload';
 import tracksRouter from './routes/tracks';
 import authRoutes from './routes/authRoutes';
+import audioRouter from './routes/audio';
 
 dotenv.config();
 
@@ -38,12 +39,6 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Serve processed audio files statically so the client can stream them
-app.use(
-  '/uploads',
-  express.static(path.join(__dirname, '..', 'uploads'))
-);
-
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -51,6 +46,7 @@ app.use(
 app.use('/api/upload', uploadRouter);
 app.use('/api/tracks', tracksRouter);
 app.use('/api/auth', authRoutes);
+app.use('/api/audio', audioRouter);
 
 /** Health-check endpoint */
 app.get('/health', (_req, res) => {

@@ -14,6 +14,7 @@ import uploadRouter from './routes/upload';
 import tracksRouter from './routes/tracks';
 import authRoutes from './routes/authRoutes';
 import audioRouter from './routes/audio';
+import aiSettingsRouter from './routes/aiSettings';
 
 dotenv.config();
 
@@ -47,6 +48,7 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/tracks', tracksRouter);
 app.use('/api/auth', authRoutes);
 app.use('/api/audio', audioRouter);
+app.use('/api/ai', aiSettingsRouter);
 
 /** Health-check endpoint */
 app.get('/health', (_req, res) => {

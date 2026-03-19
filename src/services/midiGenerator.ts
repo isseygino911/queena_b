@@ -13,7 +13,7 @@ import { AnalyzedOnset } from './beatAnalyzer';
 const LANE_COUNT = 6;
 
 // Difficulty parameters (configurable per track)
-let MIN_NOTE_GAP_MS = 200;
+let MIN_NOTE_GAP_MS = 250;
 let MAX_NOTES_PER_SECOND = 8;
 
 /**

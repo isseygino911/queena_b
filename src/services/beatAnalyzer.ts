@@ -35,7 +35,7 @@ function downsampleOnsets(onsets: OnsetEvent[], maxCount: number): OnsetEvent[] 
 /**
  * Fallback: Simple quantization to beat grid when AI is unavailable.
  */
-function quantizeToBeatGrid(
+export function quantizeToBeatGrid(
   onsets: OnsetEvent[],
   bpm: number
 ): AnalyzedOnset[] {

@@ -20,7 +20,7 @@ import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { processAudioFile } from '../services/audioProcessor';
 import { buildMidiTrackFromAnalyzedOnsets, setDifficultyParams } from '../services/midiGenerator';
-import { analyzeBeatPattern } from '../services/beatAnalyzer';
+import { analyzeBeatPattern } from '../services/aiService';
 import pool from '../db/database';
 import { Difficulty } from '../../../shared/types/midi';
 import { authMiddleware, adminMiddleware } from '../middleware/auth';
@@ -150,8 +150,9 @@ router.post(
       await pool.execute(
         `INSERT INTO tracks
            (id, title, artist, bpm, duration, section_start, section_end,
-            original_file_path, processed_file_path, midi_data, waveform_data, difficulty)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            original_file_path, processed_file_path, midi_data, waveform_data, difficulty,
+            min_note_gap_ms, max_notes_per_second, onset_threshold)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           trackId,
           title,

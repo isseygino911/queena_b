@@ -29,9 +29,23 @@ const PORT = Number(process.env.PORT ?? 3002);
 app.use(helmet());
 
 // CORS with credentials for cookies
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://ophieliu.com',
+  'https://ophieliu.com/api',
+  process.env.CLIENT_ORIGIN,
+].filter(Boolean) as string[];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g., mobile apps, curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   })
 );

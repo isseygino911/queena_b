@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc",
-    "start": "node dist/server/src/index.js",
+    "start": "node dist/queena_b/src/index.js",
     "db:init": "ts-node src/db/init.ts"
   },
   "dependencies": {

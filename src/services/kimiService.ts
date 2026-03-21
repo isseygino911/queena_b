@@ -6,7 +6,7 @@
  * and section selection.
  */
 
-import { OnsetEvent } from '../../../shared/types/midi';
+import { OnsetEvent } from '../../shared/types/midi';
 import { AnalyzedOnset } from './beatAnalyzer';
 
 const MAX_ONSETS_FOR_PROMPT = 150;

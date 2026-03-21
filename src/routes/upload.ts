@@ -22,7 +22,7 @@ import { processAudioFile } from '../services/audioProcessor';
 import { buildMidiTrackFromAnalyzedOnsets, setDifficultyParams } from '../services/midiGenerator';
 import { analyzeBeatPattern } from '../services/aiService';
 import pool from '../db/database';
-import { Difficulty } from '../../../shared/types/midi';
+import { Difficulty } from '../../shared/types/midi';
 import { authMiddleware, adminMiddleware } from '../middleware/auth';
 import { uploadToS3, generateS3Key } from '../config/s3';
 

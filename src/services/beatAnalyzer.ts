@@ -6,7 +6,7 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { OnsetEvent } from '../../../shared/types/midi';
+import { OnsetEvent } from '../../shared/types/midi';
 import { quantiseNoteTime } from './midiGenerator';
 
 const MAX_ONSETS_FOR_PROMPT = 150;

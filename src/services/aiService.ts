@@ -5,7 +5,7 @@
  * Routes to the configured AI provider (Gemini or Kimi) based on admin selection.
  */
 
-import { OnsetEvent } from '../../../shared/types/midi';
+import { OnsetEvent } from '../../shared/types/midi';
 import { 
   AnalyzedOnset, 
   analyzeBeatPattern as analyzeWithGemini,

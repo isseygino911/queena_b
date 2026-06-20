@@ -21,6 +21,9 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT ?? 3002);
 
+// Trust proxy (required for rate-limit behind reverse proxy like Caddy)
+app.set('trust proxy', 1);
+
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
@@ -32,7 +35,7 @@ app.use(helmet());
 const allowedOrigins = [
   'http://localhost:5173',
   'https://ophieliu.com',
-  'https://ophieliu.com/api',
+  'https://www.ophieliu.com',
   process.env.CLIENT_ORIGIN,
 ].filter(Boolean) as string[];
 

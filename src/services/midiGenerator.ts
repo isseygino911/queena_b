@@ -6,7 +6,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { MidiNote, MidiTrack, OnsetEvent } from '../../../shared/types/midi';
+import { MidiNote, MidiTrack, OnsetEvent } from '../types/midi';
 
 /** Number of playable lanes (keyboard keys) in the game */
 const LANE_COUNT = 6;

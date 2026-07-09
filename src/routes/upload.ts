@@ -19,7 +19,7 @@ import { processAudioFile } from '../services/audioProcessor';
 import { buildMidiTrack, deduplicateNotes } from '../services/midiGenerator';
 import { selectBestSection } from '../services/sectionSelector';
 import pool from '../db/database';
-import { Difficulty } from '../../../shared/types/midi';
+import { Difficulty } from '../types/midi';
 
 const router = express.Router();
 

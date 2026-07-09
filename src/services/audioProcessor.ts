@@ -10,7 +10,7 @@
 import ffmpeg from 'fluent-ffmpeg';
 import fs from 'fs';
 import path from 'path';
-import { OnsetEvent, WaveformData } from '../../../shared/types/midi';
+import { OnsetEvent, WaveformData } from '../types/midi';
 
 /** Output sample rate for processed audio */
 const TARGET_SAMPLE_RATE = 16_000;

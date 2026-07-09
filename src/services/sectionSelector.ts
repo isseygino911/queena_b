@@ -7,7 +7,7 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { OnsetEvent } from '../../../shared/types/midi';
+import { OnsetEvent } from '../types/midi';
 
 const MAX_ONSETS_FOR_PROMPT = 200;
 const TARGET_SECTION_DURATION = 20;

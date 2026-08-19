@@ -37,6 +37,8 @@ const allowedOrigins = [
   'http://localhost:5173',
   'https://ophieliu.com',
   'https://www.ophieliu.com',
+  'https://www.drums.isseylab.com',
+  'https://drums.isseylab.com',
   process.env.CLIENT_ORIGIN,
 ].filter(Boolean) as string[];
 

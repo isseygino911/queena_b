@@ -71,3 +71,26 @@ CREATE TABLE IF NOT EXISTS user_progress (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_progress_user ON user_progress(user_id);
+
+CREATE TABLE IF NOT EXISTS drum_scores (
+  id              INT PRIMARY KEY AUTO_INCREMENT,
+  user_id         INT,
+  -- Signed INT to match users.id, which is int(11) on the live database.
+  -- (schema.sql declares users.id as INT UNSIGNED, but the deployed table is
+  -- signed; a mismatched foreign key is rejected with errno 150.)
+  instrument_slug VARCHAR(32) NOT NULL,   -- e.g. 'djembe'
+  challenge_id    VARCHAR(64) NOT NULL,   -- e.g. 'djembe-3'
+  score           INT NOT NULL,
+  accuracy        FLOAT,
+  max_combo       INT,
+  perfect_count   INT,
+  good_count      INT,
+  miss_count      INT,
+  total_notes     INT,
+  grade           VARCHAR(4),
+  created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX idx_drum_scores_challenge ON drum_scores(challenge_id, score DESC);
+CREATE INDEX idx_drum_scores_user      ON drum_scores(user_id);
